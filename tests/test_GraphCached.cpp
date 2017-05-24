@@ -1,37 +1,49 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <iostream>
+#include <unistd.h>
 
 #include "GraphCached.h"
 
-using namespace GraphCached;
+using namespace graphcached;
 const int IOSIZE = 24*1024*1024;
-class Block {
-	void* buffer;
+class Block : public DiskComponent{
+public:
+	Block(): DiskComponent() {
+	}
 };
 class TestGraph : public GraphCached<int, Block> {
 public:
-	TestGraph(string filename): GraphCached(filename) {}
-	int readFromFile(int& key, Block& value) {
-		int fd = open(baseFilename, O_RDONLY);
-		ssize_t offset = key * IOSIZE;
-		ssize_t bytes = 0;
-		while( bytes < IOSIZE) {
-			ssize_t cur = pread(fd, value.buffer, 1024, bytes + offset);
-			bytes += cur;
-			if (cur == 0) break;
-		}
-		close(fd);
+	TestGraph(std::string filename): GraphCached(filename) {}
+	DiskSegmentInfo plocate(int key) {
+		DiskSegmentInfo dsi(baseFilename.c_str(), key*IOSIZE, IOSIZE);
+		//int fd = open(baseFilename.c_str(), O_RDONLY);
+		//off_t offset = key * IOSIZE;
+		//ssize_t bytes = 0;
+		//while( bytes < IOSIZE) {
+		//	ssize_t cur = pread(fd, value.getBuffer(), 1024, bytes + offset);
+		//	bytes += cur;
+		//	if (cur == 0) break;
+		//}
+		//close(fd);
+		return dsi;
 	}
-	int writeToFile(int& key, Block& value) {
-		
-	}
-}
+};
 
 int main(int argc, char* argv[]) {
-	string filename = "../data/soc-LiveJournal1.txt"; 
+        GraphCached_init(argc, argv);
+	std::cout<< "graphcached initialized" << std::endl;
+	std::string filename = "../data/soc-LiveJournal.txt"; 
 	TestGraph graph(filename);
-	Block& firstBlock = graph.read(0);
-	std::cout<< (char*)(firstBlock.buffer)[0]<< std::endl;
+	Block* firstBlock = graph.read(0);
+	
+	std::cout<<firstBlock->data<<std::endl;
+	std::cout<<"first line: ";
+	char* data = reinterpret_cast<char*>(firstBlock->data);
+	int i = 0; 
+	while ('\n' != data[i])
+	    std::cout<<data[i++];
+	std::cout<<std::endl;
+	
 	return 0;
 }

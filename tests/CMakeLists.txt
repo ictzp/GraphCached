@@ -1,7 +1,7 @@
-set(HIRT_LIB mola)
-set(HIRT_CORE_LIB "${HIRT_LIB}_core")
+project(test)
+set(HIRT_LIB memcached)
 
-link_directories(${LibHIRT_SOURCE_DIR}/src)
+#link_directories(${LibHIRT_SOURCE_DIR}/src)
 
 macro(add_libmola_test name libraries)
   add_executable(${name}.run
@@ -13,5 +13,5 @@ macro(add_libmola_test name libraries)
 endmacro(add_libmola_test)
 
 
-add_libmola_test(test_GraphCached ${HIRT_CORE_LIB})
+add_libmola_test(test_GraphCached ${HIRT_LIB})
 
