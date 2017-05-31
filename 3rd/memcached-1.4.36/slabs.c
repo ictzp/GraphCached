@@ -222,7 +222,7 @@ static int do_slabs_newslab(const unsigned int id) {
         : p->size * p->perslab;
     char *ptr;
 
-    if ((mem_limit && mem_malloced + len > mem_limit && p->slabs > 0
+    if ((mem_limit != -1 && mem_malloced + len > mem_limit //&& p->slabs > 0
          && g->slabs == 0)) {
         mem_limit_reached = true;
 	//printf("mem_limit_reached\n");

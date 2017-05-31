@@ -2079,6 +2079,10 @@ int init_memcached(int argc, char **argv) {
     /* set stderr non-buffering (for running under, say, daemontools) */
     setbuf(stderr, NULL);
 
+    printf("argc=%d, argv:\n", argc);
+    int i = 0;
+    for (; i < argc; i++)
+        printf("%s\n", argv[i]);
     /* process arguments */
     while (-1 != (c = getopt(argc, argv,
           "a:"  /* access mask for unix socket */
@@ -2135,8 +2139,9 @@ int init_memcached(int argc, char **argv) {
             settings.socketpath = optarg;
             break;
         case 'm':
-            settings.maxbytes = ((size_t)atoi(optarg)) * 1024 * 1024;
-            break;
+            settings.maxbytes = ((size_t)atoi(optarg)) * 1024 * 1024 * 1024; 
+	    printf("memory budget for memcached: %ld\n", settings.maxbytes);
+	    break;
         case 'M':
 	    printf("evict_to_free\n");
             settings.evict_to_free = 0;

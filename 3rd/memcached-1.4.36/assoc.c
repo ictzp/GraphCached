@@ -60,15 +60,6 @@ static bool started_expanding = false;
  */
 static unsigned int expand_bucket = 0;
 
-void print_key(const char* key, size_t nkey) {
-    assert(nkey > 0);
-    int i;
-    printf("0x");
-    for (i = 0; i < nkey - 1; i++) {
-        printf("%02x-", key[i]);
-    }
-    printf("%02x", key[i]);
-}
 
 void assoc_init(const int hashtable_init) {
     if (hashtable_init) {
@@ -88,9 +79,6 @@ void assoc_init(const int hashtable_init) {
 item *assoc_find(const char *key, const size_t nkey, const uint32_t hv) {
     item *it;
     unsigned int oldbucket;
-    //printf("key = ");
-    //print_key(key, nkey);
-    //printf(" hv = %d\n", hv);
     if (expanding &&
         (oldbucket = (hv & hashmask(hashpower - 1))) >= expand_bucket)
     {

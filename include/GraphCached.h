@@ -111,6 +111,15 @@ public:
 };
 
 const int UPDATE_LRU = 1;
+void print_key(const char* key, size_t nkey) {
+    assert(nkey > 0);
+    int i;
+    printf("0x");
+    for (i = 0; i < nkey - 1; i++) {
+        printf("%02x-", key[i]);
+    }
+    printf("%02x", key[i]);
+}
 
 template <class KeyTy, class ValueTy>
 ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default = 1*/) {
@@ -129,6 +138,9 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
     
     // if the item is not null, mark it as a hit and return it
     if (it != NULL) {
+        //printf("key = ");
+        //print_key(dckey, ndckey);
+        //printf(" hv = %u\n", hv);
 #ifdef COLLECT
         rhits++;
 #endif
