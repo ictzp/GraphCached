@@ -16,8 +16,8 @@ class TestGraph : public GraphCached<int, Block> {
 public:
 	TestGraph(std::string filename): GraphCached(filename) {}
 	DiskSegmentInfo plocate(int key) {
-		DiskSegmentInfo dsi(baseFilename.c_str(), key*IOSIZE, IOSIZE);
-		//int fd = open(baseFilename.c_str(), O_RDONLY);
+		int fd = open(baseFilename.c_str(), O_RDONLY);
+		DiskSegmentInfo dsi(fd, key*IOSIZE, IOSIZE);
 		//off_t offset = key * IOSIZE;
 		//ssize_t bytes = 0;
 		//while( bytes < IOSIZE) {
@@ -37,9 +37,9 @@ int main(int argc, char* argv[]) {
 	TestGraph graph(filename);
 	Block* firstBlock = graph.read(0);
 	
-	std::cout<<firstBlock->data<<std::endl;
+	std::cout<<firstBlock->data()<<std::endl;
 	std::cout<<"first line: ";
-	char* data = reinterpret_cast<char*>(firstBlock->data);
+	char* data = reinterpret_cast<char*>(firstBlock->data());
 	int i = 0; 
 	while ('\n' != data[i])
 	    std::cout<<data[i++];

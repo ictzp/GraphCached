@@ -26,6 +26,14 @@
 
 #include "sasl_defs.h"
 
+#define LRURETRY 
+
+#define GCPAGESIZE 4096
+#define PAGESIZEMASK1 0xfffffffffffff000ull
+#define PAGESIZEMASK2 0xfffull
+#define PAGESIZEMASK3 0xfffff000u
+#define PAGESIZEMASK4 0xfffu
+
 /** Maximum length of a key. */
 #define KEY_MAX_LENGTH 250
 

@@ -203,6 +203,11 @@ static item *do_item_alloc_pull(const size_t ntotal, const unsigned int id) {
         }
     }
 
+#ifdef LRURETRY
+    pthread_mutex_lock(&nretry_locks[i]);
+    nretry[i]++;
+    pthread_mutex_unlock(&nretry_locks[i]);
+#endif
     if (i > 0) {
         pthread_mutex_lock(&lru_locks[id]);
         itemstats[id].direct_reclaims += i;
@@ -254,7 +259,7 @@ item *do_item_alloc(char *key, const size_t nkey, const unsigned int flags,
         return 0;
     }
     //size_t ntotal = item_make_header(nkey + 1, flags, nbytes, suffix, &nsuffix);
-    size_t ntotal = sizeof(item) + nkey + nbytes;
+    size_t ntotal = sizeof(item) + nkey + nbytes + GCPAGESIZE - 1;
     if (settings.use_cas) {
         ntotal += sizeof(uint64_t);
     }

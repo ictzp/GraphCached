@@ -49,6 +49,9 @@ item *do_item_get(const char *key, const size_t nkey, const uint32_t hv, conn *c
 item *do_item_touch(const char *key, const size_t nkey, uint32_t exptime, const uint32_t hv, conn *c);
 void item_stats_reset(void);
 extern pthread_mutex_t lru_locks[POWER_LARGEST];
+extern pthread_mutex_t nretry_locks[11];
+extern int nretry[11];
+void print_nretry();
 
 int start_lru_maintainer_thread(void);
 int stop_lru_maintainer_thread(void);

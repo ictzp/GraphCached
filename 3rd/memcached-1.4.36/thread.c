@@ -36,6 +36,11 @@ struct conn_queue {
     pthread_mutex_t lock;
 };
 
+#ifdef LRURETRY
+pthread_mutex_t nretry_locks[11];
+int nretry[11];
+#endif
+
 /* Locks for cache LRU operations */
 pthread_mutex_t lru_locks[POWER_LARGEST];
 
@@ -510,6 +515,14 @@ item *item_alloc(char *key, size_t nkey, int flags, rel_time_t exptime, int nbyt
     return it;
 }
 
+#ifdef LRURETRY
+void print_nretry() {
+    int i;
+    for (i = 0; i < 11; i++)
+        printf("retry times %d: %d\n", i, nretry[i]);
+}
+#endif
+
 /*
  * Returns an item if it hasn't been marked as expired,
  * lazy-expiring as needed.
@@ -682,6 +695,12 @@ void memcached_thread_init(int nthreads) {
     int         i;
     int         power;
 
+#ifdef LRURETRY
+    for (i = 0; i < 11; i++) {
+        pthread_mutex_init (&nretry_locks[i], NULL);
+        nretry[i] = 0;
+     }
+#endif
     for (i = 0; i < POWER_LARGEST; i++) {
         pthread_mutex_init(&lru_locks[i], NULL);
     }

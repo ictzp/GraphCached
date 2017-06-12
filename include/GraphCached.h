@@ -38,12 +38,12 @@ using GraphCachedKey = std::string;
 
 class DiskSegmentInfo {
 public:
-	std::string _filename;
+	int _fd;
 	off_t _offset;
 	size_t _size;
 public:
-	DiskSegmentInfo(std::string fn, off_t off, size_t sz) : _filename(fn), _offset(off), _size(sz){}
-	DiskSegmentInfo(): _filename(""), _offset(0), _size(0) {}
+	DiskSegmentInfo(int fn, off_t off, size_t sz) : _fd(fn), _offset(off), _size(sz){}
+	DiskSegmentInfo(): _fd(0), _offset(0), _size(0) {}
 	size_t size() {return _size;}
 };
 
@@ -55,7 +55,7 @@ public:
 	union {
 	    uint64_t cas;
 	    char end;
-	} data[];
+	} _data[];
 	
 public:
 	DiskComponent() {}
@@ -70,30 +70,57 @@ public:
 	    }
 	    return 0;
 	}
+	// return aligned data address
+	void* data() {
+	   auto ptr = reinterpret_cast<std::uintptr_t>(_data);
+	   auto tmp = ptr & PAGESIZEMASK1;
+	   return reinterpret_cast<void*>(tmp + ((ptr & PAGESIZEMASK2) == 0 ? 0 : GCPAGESIZE));
+	}
 };
+
+class Item;
+class Hashtable;
+class LruList;
 
 template <class KeyTy, class ValueTy>
 class GraphCached {
 protected:
 	std::string baseFilename;
+        //Hashtable<KeyTy> hashtable;   // cache hashtable
+        //LruList lrulist;         // cache lru list
+	//CacheManager cachemanager;         // manage the memory cache space
 #ifdef COLLECT
 	std::atomic<long> rtimes;
 	std::atomic<long> rhits;
 	std::atomic<long> wtimes;
 	std::atomic<long> whits;
+	std::atomic<long long int> mbytes;
 #endif
 public:
         GraphCached(){
 #ifdef COLLECT
-            rtimes = rhits = wtimes = whits = 0;
+            mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	}
-	GraphCached(std::string filename): baseFilename(filename) {
+	GraphCached(std::string filename): baseFilename(filename)   {
 #ifdef COLLECT
-            rtimes = rhits = wtimes = whits = 0;
-#endif 
+            mbytes = rtimes = rhits = wtimes = whits = 0;
+#endif
 	}
+	// GraphCached(std::string filename, size_t cls, size_t cs, size_t mps): baseFilename(filename)   {
+#ifdef C// OLLECT
+        //     mbytes = rtimes = rhits = wtimes = whits = 0;
+#endif
+        //     initGraphCache(cls, cs, mps);
+        // }
 	~GraphCached(){}
+	
+	// void initGraphCache(size_t cls, size_t cs, size_t mps)
+	// {
+	//     hashtable = new Hashtable();
+	//     lruList = new LruList();
+	//     cachemanager = new CacheManager(cls, cs, mps);
+	// }
 	ValueTy* read(KeyTy key, int cacheFlag = 1);
 	int write(KeyTy key, ValueTy& value, int wbFlag = 0);
 	//virtual int readFromFile(KeyTy& key, ValueTy& value) = 0;
@@ -106,6 +133,10 @@ public:
             std::cout<<"total write times: "<<wtimes<<std::endl;
             std::cout<<"total write hits: "<<whits<<std::endl;
             std::cout<<"hit rate: "<<(rhits+whits)/(1.0*(rtimes+wtimes))<<std::endl;
+            std::cout<<"miss bytes: "<<mbytes<<std::endl;
+#endif
+#ifdef LRURETRY
+            print_nretry();
 #endif
 	}
 };
@@ -151,6 +182,9 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
     // else, read the item from disk and potentially store it into the memory cached depending on the 'cachedFlag' (which is the last parameter in this funtion)
     else {
        DiskSegmentInfo dsi = plocate(key);
+#ifdef COLLECT
+       mbytes += dsi._size;
+#endif
        if (cacheFlag) {
            //DiskSegmentInfo dsi = plocate(key);
 	   //std::cout<<"dsi._size = "<<dsi.size()<<" sizeof(ValueTy) = "<<sizeof(ValueTy)<<std::endl;
@@ -164,12 +198,17 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
 	       value->dsi = dsi;
 	       value->gkey = dckey;
 	       value->pitem = it;
-	       int fd = open(dsi._filename.c_str(), O_RDONLY);
-	       if (fd == -1)
-	           std::cerr<< "Cannot open file: "<< dsi._filename<< std::endl;
+	       int fd = dsi._fd; //open(dsi._filename.c_str(), O_RDONLY|O_DIRECT);
+	       //if (fd == -1)
+	       //    std::cerr<< "Cannot open file: "<< dsi._filename<< std::endl;
 	       size_t bytes = 0;
 	       while (bytes < dsi._size) {
-	           size_t cur = pread(fd, value->data, dsi._size - bytes, dsi._offset + bytes);
+	           size_t size = dsi._size;
+	           if ((dsi._size&PAGESIZEMASK2) != 0) {
+	               size = (dsi._size & PAGESIZEMASK1) + GCPAGESIZE;
+		   }
+	           size_t cur = pread(fd, value->data(), size, dsi._offset);
+		   if (cur == -1) { std::cout<<"read file error"<<std::endl; exit(0);}
 		   bytes += cur;
 	       }
 	       //printf("first line: ");
@@ -179,7 +218,7 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
 	       //    printf("%c", data[i++]);
 	       //printf("\n");
 	       
-	       close(fd);
+	       //close(fd);
 	       // the function do_item_link() will add the item into memory cache and increase its ref counter by 1
 	       do_item_link(it, hv);
 	       // decrease the ref counter before exit
@@ -193,18 +232,23 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
 	   }
        }
        {
-           char* tmpbuffer = new char[sizeof(ValueTy)+dsi._size];
+	   char* tmpbuffer = new char[sizeof(ValueTy) + dsi._size + GCPAGESIZE - 1];
 	   DiskComponent * value = new(static_cast<void*>(tmpbuffer)) ValueTy();
 	   value->dsi = dsi;
 	   value->gkey = dckey;
 	   value->pitem = NULL;
-	   int fd = open(dsi._filename.c_str(), O_RDONLY);
+	   int fd = dsi._fd; //open(dsi._filename.c_str(), O_RDONLY|O_DIRECT);
 	   size_t bytes = 0;
 	   while (bytes < dsi._size) {
-	       size_t cur = pread(fd, value->data, dsi._size - bytes, dsi._offset + bytes);
+	       size_t size = dsi._size;
+	       if ((dsi._size&PAGESIZEMASK2) != 0) {
+	           size = (dsi._size & PAGESIZEMASK1) + GCPAGESIZE;
+	       }
+	       size_t cur = pread(fd, value->data(), size, dsi._offset);
+               if (cur == -1) { std::cout<<"read file error"<<std::endl; exit(0);}
 	       bytes += cur;
 	   }
-	   close(fd);
+	   //close(fd);
            return dynamic_cast<ValueTy*>(value);
         }
     }
