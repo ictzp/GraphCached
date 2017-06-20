@@ -42,17 +42,18 @@ endif()
 #  add_definitions(-DUSE_UCONTEXT=1)
 #endif()
 #add_subdirectory(src)
-add_subdirectory(3rd/memcached-1.4.36)
+#add_subdirectory(3rd/memcached-1.4.36)
 
 install(FILES
-        "include/GraphCached.h"
-	"3rd/memcached-1.4.36/memcached.h"
-        "3rd/memcached-1.4.36/assoc.h"      "3rd/memcached-1.4.36/itoa_ljust.h"     "3rd/memcached-1.4.36/protocol_binary.h"
-	"3rd/memcached-1.4.36/bipbuffer.h"  "3rd/memcached-1.4.36/jenkins_hash.h"   "3rd/memcached-1.4.36/sasl_defs.h"
-	"3rd/memcached-1.4.36/cache.h"      "3rd/memcached-1.4.36/logger.h"         "3rd/memcached-1.4.36/slabs.h"
-	"3rd/memcached-1.4.36/crawler.h"    "3rd/memcached-1.4.36/memcached.h"      "3rd/memcached-1.4.36/stats.h"
-	"3rd/memcached-1.4.36/hash.h"       "3rd/memcached-1.4.36/murmur3_hash.h"   "3rd/memcached-1.4.36/trace.h"
-	"3rd/memcached-1.4.36/items.h"      "3rd/memcached-1.4.36/util.h"
+        "include/GraphCached.h"             "inlcude/Hashtable.h"
+	"include/CacheManager.h"            "include/CachePolicy.h"          "include/LruPolicy.h"
+#	"3rd/memcached-1.4.36/memcached.h"
+#        "3rd/memcached-1.4.36/assoc.h"      "3rd/memcached-1.4.36/itoa_ljust.h"     "3rd/memcached-1.4.36/protocol_binary.h"
+#	"3rd/memcached-1.4.36/bipbuffer.h"  "3rd/memcached-1.4.36/jenkins_hash.h"   "3rd/memcached-1.4.36/sasl_defs.h"
+#	"3rd/memcached-1.4.36/cache.h"      "3rd/memcached-1.4.36/logger.h"         "3rd/memcached-1.4.36/slabs.h"
+#	"3rd/memcached-1.4.36/crawler.h"    "3rd/memcached-1.4.36/memcached.h"      "3rd/memcached-1.4.36/stats.h"
+#	"3rd/memcached-1.4.36/hash.h"       "3rd/memcached-1.4.36/murmur3_hash.h"   "3rd/memcached-1.4.36/trace.h"
+#	"3rd/memcached-1.4.36/items.h"      "3rd/memcached-1.4.36/util.h"
 	DESTINATION 
         "include"
         )

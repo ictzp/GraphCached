@@ -8,8 +8,8 @@ macro(add_libmola_test name libraries)
                  ${name}.cpp)
   set(extra_args ${ARGN})
 
-  target_link_libraries(${name}.run
-                        ${libraries} ${extra_args})
+#  target_link_libraries(${name}.run
+#                        ${libraries} ${extra_args})
 endmacro(add_libmola_test)
 
 
