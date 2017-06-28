@@ -14,4 +14,4 @@ endmacro(add_libmola_test)
 
 
 add_libmola_test(test_GraphCached ${HIRT_LIB})
-
+add_libmola_test(test_find ${HIRT_LIB})

@@ -45,7 +45,7 @@ endif()
 #add_subdirectory(3rd/memcached-1.4.36)
 
 install(FILES
-        "include/GraphCached.h"             "inlcude/Hashtable.h"
+        "include/GraphCached.h"             "include/Hashtable.h"            "include/DiskComponent.h"
 	"include/CacheManager.h"            "include/CachePolicy.h"          "include/LruPolicy.h"
 #	"3rd/memcached-1.4.36/memcached.h"
 #        "3rd/memcached-1.4.36/assoc.h"      "3rd/memcached-1.4.36/itoa_ljust.h"     "3rd/memcached-1.4.36/protocol_binary.h"

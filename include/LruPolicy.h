@@ -16,7 +16,18 @@ public:
     void push(DiskComponent<KeyTy>*);
     uint64_t evict(uint64_t, Hashtable<KeyTy>*);
     void erase(typename std::list<DiskComponent<KeyTy>*>::iterator);
+    void dump();
 };
+
+template <class KeyTy>
+void LruList<KeyTy>::dump() {
+    std::cout<<"LruList:"<<std::endl;
+    std::cout<<"================="<<std::endl;
+    for (auto it = lst.begin(); it != lst.end(); ++it) {
+        std::cout<<*it<<std::endl;
+    }
+    std::cout<<"================="<<std::endl;
+}
 
 template <class KeyTy>
 class LruPolicy: public CachePolicy<KeyTy> {
@@ -26,6 +37,7 @@ public:
     void remove(DiskComponent<KeyTy>*);
     uint64_t evict(uint64_t, Hashtable<KeyTy>*);
     void add(DiskComponent<KeyTy>*);
+    void dump() {ll.dump();}
 };
 
 template <class KeyTy>

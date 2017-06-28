@@ -63,8 +63,20 @@ public:
 	}
 	~DiskComponent() {}
 	KeyTy& getKey() {return gkey;}
-	// return aligned data address
+	void dump();
 };
+
+template <class KeyTy>
+void DiskComponent<KeyTy>::dump() {
+    std::cout<<"dsi:      (fd:"<<dsi._fd<<", size:"<<dsi._size<<", offset:"<<dsi._offset<<")"<<std::endl;
+    std::cout<<"gkey:     "<<gkey<<std::endl;
+    std::cout<<"size:     "<<size<<std::endl;
+    std::cout<<"curSize:  "<<curSize<<std::endl;
+    std::cout<<"refcount: "<<refcount<<std::endl;
+    std::cout<<"state:    "<<state<<std::endl;
+    std::cout<<"addr:     "<<addr<<std::endl;
+    //std::cout<<"lruPos:   "<<lruPos.pointer<<std::endl;
+}
 
 } // namespace graphcached
 #endif

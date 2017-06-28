@@ -23,30 +23,36 @@ class GraphCached {
 protected:
 	std::string baseFilename;
 	CacheManager<KeyTy, ValueTy>* cachemanager;         // manage the memory cache space
+        // dump mutex
+        std::mutex dMutex;
+
 #ifdef COLLECT
 	std::atomic<long> rtimes;
 	std::atomic<long> rhits;
 	std::atomic<long> wtimes;
 	std::atomic<long> whits;
 	std::atomic<long long int> mbytes;
+
+        std::atomic<long> brtimes;
+	std::atomic<long> brhits;
 #endif
 public:
         GraphCached(){
 #ifdef COLLECT
-            mbytes = rtimes = rhits = wtimes = whits = 0;
+            brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(12u, 4096*1024*1024ull, 24*1024*1024u);
 	}
 	GraphCached(std::string filename): baseFilename(filename)   {
 #ifdef COLLECT
-            mbytes = rtimes = rhits = wtimes = whits = 0;
+            brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(12u, 4096*1024*1024ull, 24*1024*1024u);
 	}
 
 	GraphCached(std::string filename, uint32_t clsp, uint64_t cs, uint64_t mps): baseFilename(filename) {
 #ifdef COLLECT
-            mbytes = rtimes = rhits = wtimes = whits = 0;
+            brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(clsp, cs, mps);
 	}
@@ -58,14 +64,21 @@ public:
 	//virtual int readFromFile(KeyTy& key, ValueTy& value) = 0;
 	//virtual int writeToFile(KeyTy& key, ValueTy& value) = 0;
 	virtual DiskSegmentInfo plocate(KeyTy key) = 0;
+	void dump() {
+	    std::lock_guard<std::mutex> dLock(dMutex);
+	    cachemanager->dump();
+	}
 	void stat() {
 #ifdef COLLECT
-            std::cout<<"total read times: "<<rtimes<<std::endl;
-            std::cout<<"total read hits: "<<rhits<<std::endl;
-            std::cout<<"total write times: "<<wtimes<<std::endl;
-            std::cout<<"total write hits: "<<whits<<std::endl;
-            std::cout<<"hit rate: "<<(rhits+whits)/(1.0*(rtimes+wtimes))<<std::endl;
-            std::cout<<"miss bytes: "<<mbytes<<std::endl;
+            std::cout<<"total partition read times: "<<rtimes<<std::endl;
+            std::cout<<"total partition read hits: "<<rhits<<std::endl;
+            std::cout<<"total partition write times: "<<wtimes<<std::endl;
+            std::cout<<"total partition write hits: "<<whits<<std::endl;
+            std::cout<<"partition hit ratio: "<<(rhits+whits)/(1.0*(rtimes+wtimes))<<std::endl;
+            std::cout<<"miss bytes: "<<mbytes<<std::endl<<std::endl;
+            std::cout<<"total block read times: "<<brtimes<<std::endl;
+            std::cout<<"total block read hits: "<<brhits<<std::endl;
+	    std::cout<<"block hit ratio: "<<(brhits)/(1.0*brtimes)<<std::endl;
 #endif
 #ifdef LRURETRY
             print_nretry();
@@ -89,26 +102,40 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
     // fisrt, try to get the item from the memory cache
 #ifdef COLLECT
     rtimes++;
+    auto cacheLineSize = cachemanager->getCacheLineSize();
 #endif
+    // dump();
     auto it = cachemanager->find(key); 
     DiskSegmentInfo dsi = plocate(key);
     // if the item is not null, mark it as a hit and return it
     if (it != NULL) {
 #ifdef COLLECT
         rhits++;
+	brtimes += it->size / cacheLineSize;
 #endif
-	if (it->state > 0)
+
+	if (it->state >= 0) {
+#ifdef COLLECT
+            brhits += it->size / cacheLineSize;
+#endif
 	    return reinterpret_cast<ValueTy*>(it); 
+	}
 	else { // find enough space to load the the evicted part
+#ifdef COLLECT
+            brhits += it->curSize / cacheLineSize;
+#endif
 	    cachemanager->recache(it);
 	    uint64_t size = it->size - it->curSize;
 	    int fd = dsi._fd;
 	    size_t bytes = 0;
 	    while (bytes < size) {
-	       size_t cur = pread(fd, reinterpret_cast<char*>(it->addr)+it->curSize, size, dsi._offset+it->curSize);
-               if (cur == -1) { std::cout<<"read file error"<<std::endl; exit(0);}
-	       bytes += cur;
+	        size_t cur = pread(fd, reinterpret_cast<char*>(it->addr)+it->curSize, size, dsi._offset+it->curSize);
+                if (cur == -1) { std::cout<<"read file error"<<std::endl; exit(0);}
+	        bytes += cur;
 	     }
+#ifdef COLLECT
+                mbytes += bytes;
+#endif
 	     // set the state
 	     it->curSize = it->size;
 	     it->state = 1;
@@ -141,6 +168,10 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
 	   }
 	   // change state
 	   nit->curSize = nit->size;
+	   nit->state = 1;
+#ifdef COLLECT
+           brtimes += nit->size / cachemanager->getCacheLineSize();
+#endif
 	   return reinterpret_cast<ValueTy*>(nit);
         }
     }

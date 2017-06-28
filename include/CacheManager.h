@@ -40,11 +40,16 @@ public:
     DiskComponent<KeyTy>* recache(DiskComponent<KeyTy>* dc);
     DiskComponent<KeyTy>* find(KeyTy key);
     void release(DiskComponent<KeyTy>*);  
+    void dump() {
+        ht->dump();
+	cachepolicy->dump();
+    }
+    uint32_t getCacheLineSize() {return cacheLineSize;}
 };
 
 template <class KeyTy, class ValueTy>
 void CacheManager<KeyTy, ValueTy>::release(DiskComponent<KeyTy>* dc) {
-    cachepolicy.add(dc);
+    cachepolicy->add(dc);
 }
 
 template <class KeyTy, class ValueTy>
@@ -72,11 +77,11 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t size, KeyTy k
     // currently, we proctect this with a lock
     std::lock_guard<std::mutex> cLock(cacheMutex);
     
-    std::cout<<"cacheLineSizePower:"<<cacheLineSizePower<<std::endl;
-    std::cout<<"cacheSize:"<<cacheSize<<std::endl;
-    std::cout<<"cacheLineSizeMask1:0x"<<std::hex<<cacheLineSizeMask1<<std::endl;
-    std::cout<<"cacheLineSizeMask2:0x"<<cacheLineSizeMask2<<std::dec<<std::endl;
-    std::cout<<"freeCacheSize:"<<freeCacheSize<<std::endl;
+    //std::cout<<"cacheLineSizePower:"<<cacheLineSizePower<<std::endl;
+    //std::cout<<"cacheSize:"<<cacheSize<<std::endl;
+    //std::cout<<"cacheLineSizeMask1:0x"<<std::hex<<cacheLineSizeMask1<<std::endl;
+    //std::cout<<"cacheLineSizeMask2:0x"<<cacheLineSizeMask2<<std::dec<<std::endl;
+    //std::cout<<"freeCacheSize:"<<freeCacheSize<<std::endl;
     //align size with cacheLineSize
     if (size & cacheLineSizeMask2 != 0) 
         size = size & cacheLineSizeMask1 + cacheLineSize;

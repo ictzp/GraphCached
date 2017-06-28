@@ -23,7 +23,20 @@ public:
     int insert(KeyTy key, DiskComponent<KeyTy>* dc);
     void erase(DiskComponent<KeyTy>*);
     DiskComponent<KeyTy>* find(KeyTy key);
+    void dump();
 };
+
+// print all the data in hash table
+template <class KeyTy>
+void Hashtable<KeyTy>::dump() {
+    std::cout<<"Hashtable:"<<std::endl;
+    std::cout<<"======================"<<std::endl;
+    for (auto it = ht.begin(); it != ht.end(); ++it) {
+        std::cout<<it->first<<" : "<<it->second<<std::endl;
+        it->second->dump();
+    }
+    std::cout<<"======================"<<std::endl;
+}
 
 template <class KeyTy>
 int Hashtable<KeyTy>::insert(KeyTy key, DiskComponent<KeyTy>* dc) {
