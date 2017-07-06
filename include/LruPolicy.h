@@ -3,6 +3,7 @@
 
 #include <list>
 #include <mutex>
+#include <atomic>
 #include "DiskComponent.h"
 
 namespace graphcached{
@@ -12,11 +13,16 @@ class LruList {
 protected:
     std::list<DiskComponent<KeyTy>*> lst; // inner lru list
     std::mutex lruMutex;
+    std::atomic<uint32_t> mremapcount;
+    std::atomic<uint32_t> munmapcount;
 public:
+    LruList(): mremapcount(0), munmapcount(0) {}
     void push(DiskComponent<KeyTy>*);
     uint64_t evict(uint64_t, Hashtable<KeyTy>*);
     void erase(typename std::list<DiskComponent<KeyTy>*>::iterator);
     void dump();
+    uint32_t getMremapcount() {return mremapcount;}
+    uint32_t getMunmapcount() {return munmapcount;}
 };
 
 template <class KeyTy>
@@ -38,6 +44,8 @@ public:
     uint64_t evict(uint64_t, Hashtable<KeyTy>*);
     void add(DiskComponent<KeyTy>*);
     void dump() {ll.dump();}
+    uint32_t getMremapcount() {return ll.getMremapcount();}
+    uint32_t getMunmapcount() {return ll.getMunmapcount();}
 };
 
 template <class KeyTy>
@@ -51,6 +59,7 @@ uint64_t LruList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
 	    lst.pop_front();
 	    ht->erase(dc);
 	    auto ret = munmap(dc->addr, dc->curSize);
+	    munmapcount++;
 	    if (ret == -1) {
 	        perror("munmap failed");
 		exit(0);
@@ -61,6 +70,7 @@ uint64_t LruList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
 	else {
 	    // evit part of the dc
             dc->addr = mremap(dc->addr, dc->curSize, dc->curSize-remain, 0);
+	    mremapcount++;
 	    if (dc->addr == MAP_FAILED) {
 	        perror("mremap failed");
 		exit(0);
@@ -101,6 +111,7 @@ template <class KeyTy>
 void LruPolicy<KeyTy>::add(DiskComponent<KeyTy>* dc) {
     ll.push(dc);
 }
+
 
 } // namespace GraphCached
 

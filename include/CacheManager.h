@@ -2,6 +2,7 @@
 #define _CACHEMANAGER_H_
 
 #include <limits>
+#include <atomic>
 #include "DiskComponent.h"
 #include "Hashtable.h"
 #include "CachePolicy.h"
@@ -20,6 +21,7 @@ protected:
     uint64_t cacheLineSizeMask2;
     uint64_t freeCacheSize;
 
+    std::atomic<uint32_t> mmapcount;
     Hashtable<KeyTy>* ht; 
     CachePolicy<KeyTy>* cachepolicy;
     std::mutex cacheMutex;
@@ -34,6 +36,7 @@ public:
 	// LRU policy is the default policy
 	cachepolicy = new LruPolicy<KeyTy>();
 	ht = new Hashtable<KeyTy>();
+	mmapcount = 0;
     };
     
     DiskComponent<KeyTy>* cache(uint64_t size, KeyTy key);
@@ -45,6 +48,9 @@ public:
 	cachepolicy->dump();
     }
     uint32_t getCacheLineSize() {return cacheLineSize;}
+    uint32_t getMmapcount() {return mmapcount;}
+    uint32_t getMremapcount() {return cachepolicy->getMremapcount();}
+    uint32_t getMunmapcount() {return cachepolicy->getMunmapcount();}
 };
 
 template <class KeyTy, class ValueTy>
@@ -94,6 +100,7 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t size, KeyTy k
     // new diskcomponent, add it to hashtable
     auto dc = reinterpret_cast<DiskComponent<KeyTy>*>(new ValueTy());
     dc->addr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+    mmapcount++;
     if (dc->addr == MAP_FAILED) {
         perror("MAP FAILED");
 	exit(0);

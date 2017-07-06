@@ -79,6 +79,9 @@ public:
             std::cout<<"total block read times: "<<brtimes<<std::endl;
             std::cout<<"total block read hits: "<<brhits<<std::endl;
 	    std::cout<<"block hit ratio: "<<(brhits)/(1.0*brtimes)<<std::endl;
+            std::cout<<"mmap count: "<<cachemanager->getMmapcount()<<std::endl;
+	    std::cout<<"mremap count: "<<cachemanager->getMremapcount()<<std::endl;
+	    std::cout<<"munmap count: "<<cachemanager->getMunmapcount()<<std::endl;
 #endif
 #ifdef LRURETRY
             print_nretry();
@@ -125,7 +128,10 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
             brhits += it->curSize / cacheLineSize;
 #endif
 	    cachemanager->recache(it);
-	    uint64_t size = it->size - it->curSize;
+	    uint64_t size = dsi._size - it->curSize;
+	    if ((dsi._size&PAGESIZEMASK2) != 0) {
+	        size = (dsi._size & PAGESIZEMASK1) + GCPAGESIZE;
+	    }
 	    int fd = dsi._fd;
 	    size_t bytes = 0;
 	    while (bytes < size) {
