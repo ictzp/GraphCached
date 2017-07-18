@@ -25,7 +25,9 @@ protected:
 	CacheManager<KeyTy, ValueTy>* cachemanager;         // manage the memory cache space
         // dump mutex
         std::mutex dMutex;
-
+        Queue<KeyTy>* reqQ;
+	Queue<ValueTy>* readyQ;
+	Queue<DiskComponent<KeyTy>*>* releaseQ;
 #ifdef COLLECT
 	std::atomic<long> rtimes;
 	std::atomic<long> rhits;
@@ -35,6 +37,7 @@ protected:
 
         std::atomic<long> brtimes;
 	std::atomic<long> brhits;
+	std::thread* cacheap;
 #endif
 public:
         GraphCached(){
@@ -42,12 +45,18 @@ public:
             brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(12u, 4096*1024*1024ull, 24*1024*1024u);
+	    reqQ = new Queue<KeyTy>(65536);
+	    readyQ = new Queue<ValueTy>(65536);
+	    releaseQ = new Queue<DiskComponent<KeyTy>*>(65536);
 	}
 	GraphCached(std::string filename): baseFilename(filename)   {
 #ifdef COLLECT
             brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(12u, 4096*1024*1024ull, 24*1024*1024u);
+	    reqQ = new Queue<KeyTy>(65536);
+	    readyQ = new Queue<ValueTy>(65536);
+	    releaseQ = new Queue<DiskComponent<KeyTy>*>(65536);
 	}
 
 	GraphCached(std::string filename, uint32_t clsp, uint64_t cs, uint64_t mps): baseFilename(filename) {
@@ -55,10 +64,41 @@ public:
             brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(clsp, cs, mps);
+	    reqQ = new Queue<KeyTy>(65536);
+	    readyQ = new Queue<ValueTy>(65536);
+	    releaseQ = new Queue<DiskComponent<KeyTy>*>(65536);
 	}
 	~GraphCached(){}
-	
-	int release(DiskComponent<KeyTy>* key);
+        
+	int startCacheap() {
+	    cacheap = new std::thread(&GraphCached<KeyTy, ValueTy>::run, this);  
+	    return 0;
+	}
+	void run() {
+	    while (1) {
+                KeyTy key = reqQ.front();
+	        auto it = read(key);
+		if (it) {
+		    reqQ.pop();
+		    readyQ.push(it);
+		}
+		auto dc = releaseQ.pop();
+		innner_release(dc);
+	    }
+	}
+        
+	ValueTy* get() {
+	     return readyQ.pop();
+	}
+
+	void request(KeyTy key) {
+	     reqQ.push(key);
+	}
+	void release(DiskComponent<KeyTy>* dc) {
+	     releaseQ.push(dc);
+	}
+
+	int inner_release(DiskComponent<KeyTy>* key);
 	ValueTy* read(KeyTy key, int cacheFlag = 1);
 	int write(KeyTy key, ValueTy& value, int wbFlag = 0);
 	//virtual int readFromFile(KeyTy& key, ValueTy& value) = 0;
@@ -89,14 +129,16 @@ public:
 	}
 };
 template <class KeyTy, class ValueTy>
-int GraphCached<KeyTy, ValueTy>::release(DiskComponent<KeyTy>* dc){
+int GraphCached<KeyTy, ValueTy>::inner_release(DiskComponent<KeyTy>* dc){
             dc->refcount--;
-	    int expected = 1;
-	    int desired = 0;
-	    int rc = dc->refcount;
-	    if (rc == 0 && dc->state.compare_exchange_strong(expected, desired)) {
-		cachemanager->release(dc);
-	    }
+	    //int expected = 1;
+	    //int desired = 0;
+	    //int rc = dc->refcount;
+	    //if (rc == 0 && dc->state.compare_exchange_strong(expected, desired)) {
+	    //    cachemanager->release(dc);
+	    //}
+	    dc->state = 0;
+	    cachemanager->release(dc);
 	    return 0;
 }
 const int UPDATE_LRU = 1;
