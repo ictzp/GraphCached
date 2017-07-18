@@ -50,7 +50,7 @@ public:
 
 template <class KeyTy>
 uint64_t LruList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
-    std::lock_guard<std::mutex> llLock(lruMutex);
+    //std::lock_guard<std::mutex> llLock(lruMutex);
     uint64_t remain = size;
     while (remain > 0) {
         auto dc = *(lst.begin());
@@ -86,13 +86,13 @@ uint64_t LruList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
 
 template <class KeyTy>
 void LruList<KeyTy>::erase(typename std::list<DiskComponent<KeyTy>*>::iterator it) {
-    std::lock_guard<std::mutex> llLock(lruMutex);
+    //std::lock_guard<std::mutex> llLock(lruMutex);
     lst.erase(it);
 }
 
 template <class KeyTy>
 void LruList<KeyTy>::push(DiskComponent<KeyTy>* dc) {
-    std::lock_guard<std::mutex> llLock(lruMutex);
+    //std::lock_guard<std::mutex> llLock(lruMutex);
     lst.push_back(dc);
     dc->lruPos = --lst.end();
 }

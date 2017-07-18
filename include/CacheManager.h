@@ -64,15 +64,20 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::find(KeyTy key) {
     if (dc == nullptr)
         return dc;
     // inc refcount and set state
-    int rc = dc->refcount;
-    int expected = 0;
-    int desired = 1;
-    if (rc == 0 && dc->refcount.compare_exchange_strong(expected, desired)) {
+    //int rc = dc->refcount;
+    //int expected = 0;
+    //int desired = 1;
+    //if (rc == 0 && dc->refcount.compare_exchange_strong(expected, desired)) {
+    //    dc->state = 1;
+    //    cachepolicy->remove(dc);
+    //}
+    //else {
+    //    dc->refcount++;
+    //}
+    dc->refcount++;
+    if (dc->refcount == 1) {
         dc->state = 1;
 	cachepolicy->remove(dc);
-    }
-    else {
-        dc->refcount++;
     }
     return dc;
 }
@@ -81,7 +86,7 @@ template <class KeyTy, class ValueTy>
 DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t size, KeyTy key) {
     // cache and recache are the only two interfaces which can insert item and delete item
     // currently, we proctect this with a lock
-    std::lock_guard<std::mutex> cLock(cacheMutex);
+    //std::lock_guard<std::mutex> cLock(cacheMutex);
     
     //std::cout<<"cacheLineSizePower:"<<cacheLineSizePower<<std::endl;
     //std::cout<<"cacheSize:"<<cacheSize<<std::endl;
@@ -115,7 +120,7 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t size, KeyTy k
 
 template <class KeyTy, class ValueTy>
 DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::recache(DiskComponent<KeyTy>* dc) {
-    std::lock_guard<std::mutex> cLock(cacheMutex);
+    //std::lock_guard<std::mutex> cLock(cacheMutex);
     
     uint64_t size = dc->size - dc->curSize;
     while (freeCacheSize < size) {

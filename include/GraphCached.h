@@ -4,9 +4,11 @@
 #include <string>
 #include <atomic>
 #include <iostream>
+#include <thread>
 
 #include "DiskComponent.h"
 #include "CacheManager.h"
+#include "queue.hpp"
 // GraphCached user code
 // class Graph : public GraphCached<int> {
 //
@@ -25,7 +27,10 @@ protected:
 	CacheManager<KeyTy, ValueTy>* cachemanager;         // manage the memory cache space
         // dump mutex
         std::mutex dMutex;
-
+        Queue<KeyTy>* reqQ;
+	Queue<ValueTy*>* readyQ;
+	Queue<DiskComponent<KeyTy>*>* releaseQ;
+        std::thread* cacheap;
 #ifdef COLLECT
 	std::atomic<long> rtimes;
 	std::atomic<long> rhits;
@@ -57,8 +62,47 @@ public:
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(clsp, cs, mps);
 	}
 	~GraphCached(){}
-	
-	int release(DiskComponent<KeyTy>* key);
+        
+	int startCacheap() {
+	    reqQ = new Queue<KeyTy>(65536);
+	    readyQ = new Queue<ValueTy*>(65536);
+	    releaseQ = new Queue<DiskComponent<KeyTy>*>(65536);
+	    cacheap = new std::thread(&GraphCached<KeyTy, ValueTy>::run, this);
+	    return 0;
+	}
+	void run() {
+	    while (1) {
+	        KeyTy key = reqQ->front();
+		if (std::get<0>(key) == -1) {
+		    reqQ->pop();
+		    readyQ->push(nullptr);
+		    continue;
+		}
+		auto it = read(key);
+		if (it) {
+		    reqQ->pop();
+		    readyQ->push(it);
+		}
+		int times = 0;
+		while (!releaseQ->is_empty() && times < 10) {
+		    auto dc = releaseQ->pop();
+	            inner_release(dc);
+		    times++;
+		}
+	    }
+	}
+
+	ValueTy* get() {
+	    return readyQ->pop();
+	}
+	void request(KeyTy key) {
+	    reqQ->push(key);
+	}
+	void release(DiskComponent<KeyTy>* dc) {
+	    releaseQ->push(dc);
+	}
+
+	int inner_release(DiskComponent<KeyTy>* key);
 	ValueTy* read(KeyTy key, int cacheFlag = 1);
 	int write(KeyTy key, ValueTy& value, int wbFlag = 0);
 	//virtual int readFromFile(KeyTy& key, ValueTy& value) = 0;
@@ -89,14 +133,16 @@ public:
 	}
 };
 template <class KeyTy, class ValueTy>
-int GraphCached<KeyTy, ValueTy>::release(DiskComponent<KeyTy>* dc){
+int GraphCached<KeyTy, ValueTy>::inner_release(DiskComponent<KeyTy>* dc){
             dc->refcount--;
-	    int expected = 1;
-	    int desired = 0;
-	    int rc = dc->refcount;
-	    if (rc == 0 && dc->state.compare_exchange_strong(expected, desired)) {
-		cachemanager->release(dc);
-	    }
+	    //int expected = 1;
+	    //int desired = 0;
+	    //int rc = dc->refcount;
+	    //if (rc == 0 && dc->state.compare_exchange_strong(expected, desired)) {
+	    //    cachemanager->release(dc);
+	    //}
+	    dc->state = 0;
+	    cachemanager->release(dc);
 	    return 0;
 }
 const int UPDATE_LRU = 1;
