@@ -7,6 +7,7 @@
 #include "Hashtable.h"
 #include "CachePolicy.h"
 #include "LruPolicy.h"
+#include "LookAheadPolicy.h"
 
 namespace graphcached {
 
@@ -24,6 +25,7 @@ protected:
     std::atomic<uint32_t> mmapcount;
     Hashtable<KeyTy>* ht; 
     CachePolicy<KeyTy>* cachepolicy;
+    int policy;
     std::mutex cacheMutex;
 public:
     CacheManager(uint32_t clsp, uint64_t cs, uint64_t mps):
@@ -34,9 +36,14 @@ public:
 	cacheLineSizeMask2 = cacheLineSize - 1;
 	freeCacheSize = cacheSize;
 	// LRU policy is the default policy
-	cachepolicy = new LruPolicy<KeyTy>();
+	//cachepolicy = new LruPolicy<KeyTy>();
+	//policy = 0;
+	if (cacheSize % cacheLineSize) std::cout<<"incorrect cacheSize"<<std::endl;
+	cachepolicy = new LookAheadPolicy<KeyTy>();
+	policy = 1;
 	ht = new Hashtable<KeyTy>();
 	mmapcount = 0;
+	//Block::blocksize = cacheLineSize;
     };
     
     DiskComponent<KeyTy>* cache(uint64_t size, KeyTy key);
@@ -46,6 +53,14 @@ public:
     void dump() {
         ht->dump();
 	cachepolicy->dump();
+    }
+    void reorder(size_t pid) {
+        if (policy == 1)
+            dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->reorder(pid);
+    }
+    void endIter() {
+        if (policy == 1)
+	    dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->endIter();
     }
     uint32_t getCacheLineSize() {return cacheLineSize;}
     uint32_t getMmapcount() {return mmapcount;}
@@ -76,14 +91,13 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::find(KeyTy key) {
     //}
     dc->refcount++;
     if (dc->refcount == 1) {
-        dc->state = 1;
 	cachepolicy->remove(dc);
     }
     return dc;
 }
 
 template <class KeyTy, class ValueTy>
-DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t size, KeyTy key) {
+DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key) {
     // cache and recache are the only two interfaces which can insert item and delete item
     // currently, we proctect this with a lock
     //std::lock_guard<std::mutex> cLock(cacheMutex);
@@ -94,8 +108,9 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t size, KeyTy k
     //std::cout<<"cacheLineSizeMask2:0x"<<cacheLineSizeMask2<<std::dec<<std::endl;
     //std::cout<<"freeCacheSize:"<<freeCacheSize<<std::endl;
     //align size with cacheLineSize
-    if (size & cacheLineSizeMask2 != 0) 
-        size = size & cacheLineSizeMask1 + cacheLineSize;
+    auto size = sz;
+    if ((sz & cacheLineSizeMask2) != 0) 
+        size = (sz & cacheLineSizeMask1) + cacheLineSize;
 
     // is there enough free space?
     while (freeCacheSize < size) {
@@ -112,7 +127,7 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t size, KeyTy k
     }
     freeCacheSize -= size;
     dc->size = size;
-    dc->curSize = 0;
+    dc->curSize = dc->size;
     dc->refcount++;
     ht->insert(key, dc);
     return dc;
@@ -132,6 +147,7 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::recache(DiskComponent<KeyTy>
         perror("MAP FAILED");
 	exit(0);
     }
+    freeCacheSize -= size;
     return dc;
 }
 

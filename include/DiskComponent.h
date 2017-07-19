@@ -31,7 +31,6 @@ public:
 };
 
 
-
 template <class KeyTy>
 class DiskComponent {
 public:
@@ -50,11 +49,14 @@ public:
 	// -2: all data evicted or not initialized
 	std::atomic<int> state;
         void* addr;
+	//std::list<Block*> blocks;
+	int willBeUsed;
 	typename std::list<DiskComponent<KeyTy>*>::iterator lruPos;
 public:
 	DiskComponent() {
 	    refcount = 0;
 	    state = -2;
+	    willBeUsed = 0;
 	}
 	DiskComponent(KeyTy key): gkey(key) 
 	{

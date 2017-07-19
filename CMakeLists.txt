@@ -13,7 +13,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -D__FILENAME__='\"$(
 ## memcached is written in C99
 ##set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=c99 -pthread")
 
-option(BUILD_TESTS "Enable to build the tests programs" on)
+option(BUILD_TESTS "Enable to build the tests programs" off)
 
 option(DEBUG_INFO "Enable to show the console debug info" off)
 
@@ -47,7 +47,7 @@ endif()
 install(FILES
         "include/GraphCached.h"             "include/Hashtable.h"            "include/DiskComponent.h"
 	"include/CacheManager.h"            "include/CachePolicy.h"          "include/LruPolicy.h"
-        "include/queue.hpp"
+        "include/queue.hpp"                 "include/LookAheadPolicy.h"
 #	"3rd/memcached-1.4.36/memcached.h"
 #        "3rd/memcached-1.4.36/assoc.h"      "3rd/memcached-1.4.36/itoa_ljust.h"     "3rd/memcached-1.4.36/protocol_binary.h"
 #	"3rd/memcached-1.4.36/bipbuffer.h"  "3rd/memcached-1.4.36/jenkins_hash.h"   "3rd/memcached-1.4.36/sasl_defs.h"

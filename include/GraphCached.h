@@ -30,7 +30,8 @@ protected:
         Queue<KeyTy>* reqQ;
 	Queue<ValueTy*>* readyQ;
 	Queue<DiskComponent<KeyTy>*>* releaseQ;
-        std::thread* cacheap;
+        Queue<size_t>* hintQ;
+	std::thread* cacheap;
 #ifdef COLLECT
 	std::atomic<long> rtimes;
 	std::atomic<long> rhits;
@@ -63,15 +64,21 @@ public:
 	}
 	~GraphCached(){}
         
+
 	int startCacheap() {
 	    reqQ = new Queue<KeyTy>(65536);
 	    readyQ = new Queue<ValueTy*>(65536);
 	    releaseQ = new Queue<DiskComponent<KeyTy>*>(65536);
+	    hintQ = new Queue<size_t>(65536);
 	    cacheap = new std::thread(&GraphCached<KeyTy, ValueTy>::run, this);
 	    return 0;
 	}
 	void run() {
 	    while (1) {
+	        while(!hintQ->is_empty()) {
+		    size_t pid = hintQ->pop();
+		    cachemanager->reorder(pid);
+		}
 	        KeyTy key = reqQ->front();
 		if (std::get<0>(key) == -1) {
 		    reqQ->pop();
@@ -86,7 +93,11 @@ public:
 		int times = 0;
 		while (!releaseQ->is_empty() && times < 10) {
 		    auto dc = releaseQ->pop();
-	            inner_release(dc);
+	            if (dc == nullptr) {
+		        cachemanager->endIter();
+			break;
+		    }
+		    inner_release(dc);
 		    times++;
 		}
 	    }
@@ -173,16 +184,17 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
 #ifdef COLLECT
             brhits += it->curSize / cacheLineSize;
 #endif
+	    if (it->state != -1) {std::cerr<<"error"<<std::endl; exit(0);};
 	    cachemanager->recache(it);
-	    uint64_t size = dsi._size - it->curSize;
-	    if ((dsi._size&PAGESIZEMASK2) != 0) {
-	        size = (dsi._size & PAGESIZEMASK1) + GCPAGESIZE;
-	    }
+	    uint64_t size = it->size - it->curSize;
+	    //if ((size&PAGESIZEMASK2) != 0) {
+	    //    size = (size & PAGESIZEMASK1) + GCPAGESIZE;
+	    //}
 	    int fd = dsi._fd;
 	    size_t bytes = 0;
 	    while (bytes < size) {
 	        size_t cur = pread(fd, reinterpret_cast<char*>(it->addr)+it->curSize, size, dsi._offset+it->curSize);
-                if (cur == -1) { std::cout<<"read file error"<<std::endl; exit(0);}
+                if (cur == -1) { std::cout<<"key:"<<std::get<0>(it->gkey)<<" "<<std::get<1>(it->gkey)<<" it->size:"<<it->size<<" it->curSize:"<<it->curSize<<" fd:"<<fd<<" addr:"<<it->curSize<<" size:"<<size<<" offset:"<<dsi._offset+it->curSize<<std::endl; perror("read file error:"); exit(0);}
 	        bytes += cur;
 	     }
 #ifdef COLLECT
@@ -215,7 +227,7 @@ ValueTy* GraphCached<KeyTy, ValueTy>::read(KeyTy key, int cacheFlag /* default =
 	           size = (dsi._size & PAGESIZEMASK1) + GCPAGESIZE;
 	        }
 	        size_t cur = pread(fd, nit->addr, size, dsi._offset);
-		if (cur == -1) { std::cout<<"read file error"<<std::endl; exit(0);}
+		if (cur == -1) { std::cout<<"read file error"<<std::endl; perror("read file error:"); exit(0);}
 		bytes += cur;
 	   }
 	   // change state
