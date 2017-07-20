@@ -81,7 +81,7 @@ uint64_t LruList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
 	    dc->state = -1; 
 	}
     }
-    return size - remain;
+    return size;
 }
 
 template <class KeyTy>
