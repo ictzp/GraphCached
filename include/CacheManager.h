@@ -88,7 +88,7 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::find(KeyTy key) {
     //}
     //else {
     //    dc->refcount++;
-    //}
+    //
     dc->refcount++;
     if (dc->refcount == 1) {
 	cachepolicy->remove(dc);
@@ -113,10 +113,11 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key
         size = (sz & cacheLineSizeMask1) + cacheLineSize;
 
     // is there enough free space?
-    while (freeCacheSize < size) {
+    if (freeCacheSize < size) {
         auto evicted = cachepolicy->evict(size - freeCacheSize, ht);
 	freeCacheSize += evicted;
     }
+    if (freeCacheSize < size) return nullptr;
     // new diskcomponent, add it to hashtable
     auto dc = reinterpret_cast<DiskComponent<KeyTy>*>(new ValueTy());
     dc->addr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
@@ -138,10 +139,11 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::recache(DiskComponent<KeyTy>
     //std::lock_guard<std::mutex> cLock(cacheMutex);
     
     uint64_t size = dc->size - dc->curSize;
-    while (freeCacheSize < size) {
+    if (freeCacheSize < size) {
         auto evicted = cachepolicy->evict(size - freeCacheSize, ht);
 	freeCacheSize += evicted;
     }
+    if (freeCacheSize < size) return nullptr;
     dc->addr = mremap(dc->addr, dc->curSize, dc->size, MREMAP_MAYMOVE);
     if (dc->addr == MAP_FAILED) {
         perror("MAP FAILED");
