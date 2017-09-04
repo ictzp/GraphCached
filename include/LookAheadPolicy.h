@@ -12,30 +12,33 @@ template <class KeyTy>
 class LookAheadList {
 protected:
     std::list<DiskComponent<KeyTy>*> lst; // inner lru list
-    std::mutex lruMutex;
     std::atomic<uint32_t> mremapcount;
     std::atomic<uint32_t> munmapcount;
 public:
     LookAheadList(): mremapcount(0), munmapcount(0) {}
     void push_back(DiskComponent<KeyTy>*);
     void push_front(DiskComponent<KeyTy>*);
-    uint64_t evict(uint64_t, Hashtable<KeyTy>*);
-    void erase(typename std::list<DiskComponent<KeyTy>*>::iterator);
+    uint64_t evict(uint64_t, Hashtable<KeyTy>*, typename std::list<DiskComponent<KeyTy>*>::iterator* );
+    typename std::list<DiskComponent<KeyTy>*>::iterator erase(typename std::list<DiskComponent<KeyTy>*>::iterator);
     void dump();
     uint32_t getMremapcount() {return mremapcount;}
     uint32_t getMunmapcount() {return munmapcount;}
-    void reorder(size_t pid) {
-        if (lst.empty()) return;
-        auto sz = lst.size();
-	int i = 0;
-	for (auto it = lst.begin(); i < sz - 1; it++) {
-	    i++;
-	    if (std::get<0>((*it)->gkey) == pid) {
-	        lst.push_back(*it);
-		(*it)->lruPos = --lst.end();
-		it = lst.erase(it); 
-	    }
-	}
+    int size() {
+        return lst.size();
+    }
+    typename std::list<DiskComponent<KeyTy>*>::iterator
+    begin() {
+        return lst.begin();
+    }
+    typename std::list<DiskComponent<KeyTy>*>::iterator
+    insert(typename std::list<DiskComponent<KeyTy>*>::iterator it, DiskComponent<KeyTy>* dc) {
+        auto pos = lst.insert(it, dc);
+        dc->lruPos = pos;
+        return pos;
+    }
+    typename std::list<DiskComponent<KeyTy>*>::iterator
+    end() {
+        return lst.end();
     }
 };
 
@@ -49,14 +52,15 @@ void LookAheadList<KeyTy>::dump() {
     std::cout<<"================="<<std::endl;
 }
 template <class KeyTy>
-uint64_t LookAheadList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
-    //std::lock_guard<std::mutex> llLock(lruMutex);
+uint64_t LookAheadList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht, typename std::list<DiskComponent<KeyTy>*>::iterator* watermark) {
     uint64_t remain = size;
     while (remain > 0) {
         auto dc = *(lst.begin());
 	if (dc == nullptr) return size-remain;
 	if (dc->curSize <= remain) {
 	    // evict the whole dc
+        if (*watermark == lst.begin())
+            (*watermark)++;
 	    lst.pop_front();
 	    ht->erase(dc);
 	    auto ret = munmap(dc->addr, dc->curSize);
@@ -74,6 +78,7 @@ uint64_t LookAheadList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
 	    mremapcount++;
 	    if (dc->addr == MAP_FAILED) {
 	        perror("mremap failed");
+            std::cout<<"args: "<<dc->addr<<" "<<dc->curSize<<" "<<dc->curSize-remain<<std::endl;
 		exit(0);
 	    }
 	    dc->curSize -= remain;
@@ -86,21 +91,18 @@ uint64_t LookAheadList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
 }
 
 template <class KeyTy>
-void LookAheadList<KeyTy>::erase(typename std::list<DiskComponent<KeyTy>*>::iterator it) {
-    //std::lock_guard<std::mutex> llLock(lruMutex);
-    lst.erase(it);
+typename std::list<DiskComponent<KeyTy>*>::iterator LookAheadList<KeyTy>::erase(typename std::list<DiskComponent<KeyTy>*>::iterator it) {
+    return lst.erase(it);
 }
 
 template <class KeyTy>
 void LookAheadList<KeyTy>::push_back(DiskComponent<KeyTy>* dc) {
-    //std::lock_guard<std::mutex> llLock(lruMutex);
     lst.push_back(dc);
     dc->lruPos = --lst.end();
 }
 
 template <class KeyTy>
 void LookAheadList<KeyTy>::push_front(DiskComponent<KeyTy>* dc) {
-    //std::lock_guard<std::mutex> llLock(lruMutex);
     lst.push_front(dc);
     dc->lruPos = lst.begin();
 }
@@ -110,20 +112,34 @@ class LookAheadPolicy: public CachePolicy<KeyTy> {
 protected:
     LookAheadList<KeyTy> ll;
     int activeP[512];
+    typename std::list<DiskComponent<KeyTy>*>::iterator watermark;
 public:
     LookAheadPolicy(): CachePolicy<KeyTy>() {
         for (int i = 0; i < 512; i++)
-	    activeP[i] = 0;
+	        activeP[i] = 0;
+        watermark = ll.end();
     }
     void remove(DiskComponent<KeyTy>*);
     uint64_t evict(uint64_t, Hashtable<KeyTy>*);
     void add(DiskComponent<KeyTy>*);
-    void dump() {ll.dump();}
+    void dump() {ll.dump();std::cout<<"watermark: "<<(*watermark)<<std::endl;}
     uint32_t getMremapcount() {return ll.getMremapcount();}
     uint32_t getMunmapcount() {return ll.getMunmapcount();}
     void reorder(size_t pid) {
-        ll.reorder(pid);
         activeP[pid] = 1;
+        auto sz = ll.size();
+        if (sz == 0) return;
+        for (auto it = ll.begin(); it != watermark;) {
+            if (std::get<0>((*it)->gkey) == pid) {
+                watermark = ll.insert(watermark, *it);
+                it = ll.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
+     //   std::cout<<"reorder: ";
+     //   dump();
     }
     void endIter() {
         for (int i = 0; i < 512; i++)
@@ -134,20 +150,34 @@ public:
 
 template <class KeyTy>
 void LookAheadPolicy<KeyTy>::remove(DiskComponent<KeyTy>* dc) {
-     ll.erase(dc->lruPos);
+     if (watermark == dc->lruPos) {
+         watermark = ll.erase(dc->lruPos);
+     }
+     else {
+         ll.erase(dc->lruPos);
+     }
+     //std::cout<<"remove: ";
+     //dump();
 }
 
 template <class KeyTy>
 uint64_t LookAheadPolicy<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
-    return ll.evict(size, ht);
+    auto ret = ll.evict(size, ht, &watermark);
+    if (ret) {
+    //std::cout<<"evit: ";
+    //dump();
+    }
+    return ret;
 }
 
 template <class KeyTy>
 void LookAheadPolicy<KeyTy>::add(DiskComponent<KeyTy>* dc) {
     if (activeP[std::get<0>(dc->gkey)] == 1)
-        ll.push_back(dc);
+        watermark = ll.insert(watermark, dc);
     else 
         ll.push_front(dc);
+    //std::cout<<"add: ";
+    //dump();
 }
 
 

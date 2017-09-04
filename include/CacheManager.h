@@ -26,7 +26,7 @@ protected:
     Hashtable<KeyTy>* ht; 
     CachePolicy<KeyTy>* cachepolicy;
     int policy;
-    std::mutex cacheMutex;
+    std::mutex cmMutex;
 public:
     CacheManager(uint32_t clsp, uint64_t cs, uint64_t mps):
     cacheLineSizePower(clsp), cacheSize(cs), maxPartitionSize(mps)
@@ -46,7 +46,7 @@ public:
 	//Block::blocksize = cacheLineSize;
     };
     
-    DiskComponent<KeyTy>* cache(uint64_t size, KeyTy key);
+    DiskComponent<KeyTy>* cache(uint64_t size, KeyTy key, DiskComponent<KeyTy>* dc);
     DiskComponent<KeyTy>* recache(DiskComponent<KeyTy>* dc);
     DiskComponent<KeyTy>* find(KeyTy key);
     void release(DiskComponent<KeyTy>*);  
@@ -55,10 +55,12 @@ public:
 	cachepolicy->dump();
     }
     void reorder(size_t pid) {
+    std::lock_guard<std::mutex> llLock(cmMutex);
         if (policy == 1)
             dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->reorder(pid);
     }
     void endIter() {
+    std::lock_guard<std::mutex> llLock(cmMutex);
         if (policy == 1)
 	    dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->endIter();
     }
@@ -70,11 +72,13 @@ public:
 
 template <class KeyTy, class ValueTy>
 void CacheManager<KeyTy, ValueTy>::release(DiskComponent<KeyTy>* dc) {
+    std::lock_guard<std::mutex> llLock(cmMutex);
     cachepolicy->add(dc);
 }
 
 template <class KeyTy, class ValueTy>
 DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::find(KeyTy key) {
+    std::lock_guard<std::mutex> llLock(cmMutex);
     auto dc =  ht->find(key);
     if (dc == nullptr)
         return dc;
@@ -97,7 +101,8 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::find(KeyTy key) {
 }
 
 template <class KeyTy, class ValueTy>
-DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key) {
+DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key, DiskComponent<KeyTy>* dc) {
+    std::lock_guard<std::mutex> llLock(cmMutex);
     // cache and recache are the only two interfaces which can insert item and delete item
     // currently, we proctect this with a lock
     //std::lock_guard<std::mutex> cLock(cacheMutex);
@@ -119,7 +124,6 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key
     }
     if (freeCacheSize < size) return nullptr;
     // new diskcomponent, add it to hashtable
-    auto dc = reinterpret_cast<DiskComponent<KeyTy>*>(new ValueTy());
     dc->addr = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     mmapcount++;
     if (dc->addr == MAP_FAILED) {
@@ -136,6 +140,7 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key
 
 template <class KeyTy, class ValueTy>
 DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::recache(DiskComponent<KeyTy>* dc) {
+    std::lock_guard<std::mutex> llLock(cmMutex);
     //std::lock_guard<std::mutex> cLock(cacheMutex);
     
     uint64_t size = dc->size - dc->curSize;

@@ -86,7 +86,7 @@ public:
 	    readyQ = new Queue<ValueTy*>(65536);
 	    releaseQ = new Queue<DiskComponent<KeyTy>*>(65536);
 	    hintQ = new Queue<size_t>(65536);
-	    ioQ = new Queue<DiskComponent<KeyTy>*>(65536);
+	    ioQ = new Queue<DiskComponent<KeyTy>*>(131072);
 	    iothread = new std::thread(&GraphCached<KeyTy, ValueTy>::io, this);
 	    cacheap = new std::thread(&GraphCached<KeyTy, ValueTy>::run, this);
 	    D(startTime = get_time();)
@@ -94,16 +94,27 @@ public:
 	}
 	virtual DiskSegmentInfo plocate(KeyTy key) = 0;
 	void io() {
+#ifdef COLLECT
+    //rtimes++;
+        auto cacheLineSize = cachemanager->getCacheLineSize();
+#endif
+        D(int i = 0;)
 	    while(1) {
-	        auto it = ioQ->pop();
+	        auto it = ioQ->front();
 		if (it == nullptr) {
 		    readyQ->push(nullptr);
+            ioQ->pop();
 		    continue;
 		}
 		auto dsi = it->dsi;
 		D(ioStart.push_back(std::make_tuple(get_time() - startTime, it->gkey, it->dsi._size));)
-	        if (it->state == -2) {	
-	            int fd = dsi._fd; 
+        //D(std::cout<<"ioStart"<<std::endl;)
+	        if (it->state == -2) {
+                auto ret = cachemanager->cache(dsi._size, it->gkey, it);
+                if (ret == nullptr) continue;
+	            //D(std::cout<<"cached"<<std::endl;)
+                it = ret;
+                int fd = dsi._fd; 
 	            size_t bytes = 0;
 	            while (bytes < dsi._size) {
 	                size_t size = dsi._size;
@@ -117,10 +128,18 @@ public:
 	        // change state
 	            it->curSize = it->size;
 	            it->state = 1;
+#ifdef COLLECT
+                brtimes += it->size / cacheLineSize;
+#endif
 	            readyQ->push(reinterpret_cast<ValueTy*>(it));
-	        }
+	            //D(std::cout<<"ready:"<<++i<<std::endl;)
+                ioQ->pop();
+            }
 		else if (it->state == -1) {
-		    uint64_t size = it->size - it->curSize;
+            auto ret = cachemanager->recache(it);
+            if (ret == nullptr) continue;
+		    it = ret;
+            uint64_t size = it->size - it->curSize;
 	            int fd = dsi._fd;
 	            size_t bytes = 0;
 	            while (bytes < size) {
@@ -135,9 +154,11 @@ public:
 	             it->curSize = it->size;
 	             it->state = 1;
 	             readyQ->push(reinterpret_cast<ValueTy*>(it));
-	        }
+	        ioQ->pop();    
+        }
 		else {std::cout<<"state error"<<std::endl;}
 		D(ioEnd.push_back(std::make_tuple(get_time() - startTime, it->gkey, it->dsi._size));)
+        //D(std::cout<<"ioEnd"<<std::endl;)
 	    }
         }
 
@@ -146,85 +167,93 @@ public:
     //rtimes++;
     auto cacheLineSize = cachemanager->getCacheLineSize();
 #endif
+        D(int i = 0;)
 	    while (1) {
 	        while(!hintQ->is_empty()) {
 		    size_t pid = hintQ->pop();
 		    cachemanager->reorder(pid);
 		    D(runHint.push_back(std::make_pair(getTime() - startTime, pid));)
-		}
-		int times = 0;
-		while (!releaseQ->is_empty() && times < 10) {
-		    auto dc = releaseQ->pop();
+		    //D(std::cout<<"hint: "<<pid<<std::endl;)
+            }
+		    int times = 0;
+		    while (!releaseQ->is_empty() && times < 10) {
+		        auto dc = releaseQ->pop();
 	            if (dc == nullptr) {
-		        cachemanager->endIter();
-			break;
+		            cachemanager->endIter();
+			        break;
+		        }
+		        inner_release(dc);
+		        D(runRelease.push_back(std::make_pair(getTime() - startTime, dc->gkey));)
+		        //D(std::cout<<"release"<<std::endl;)
+                times++;
 		    }
-		    inner_release(dc);
-		    D(runRelease.push_back(std::make_pair(getTime() - startTime, dc->gkey));)
-		    times++;
-		}
-	        KeyTy key = reqQ->front();
-		if (std::get<0>(key) == -1) {
-		    reqQ->pop();
+	        while(!reqQ->is_empty()) {
+            KeyTy key = reqQ->front();
+		    if (std::get<0>(key) == -1) {
+		        reqQ->pop();
 		    //readyQ->push(nullptr);
-		    ioQ->push(nullptr);
-		    continue;
-		}
-		auto dsi = plocate(key);
-		auto it = cachemanager->find(key); 
-		if (it) {
+		        ioQ->push(nullptr);
+		        continue;
+		    }
+		    auto dsi = plocate(key);
+		    auto it = cachemanager->find(key); 
+		    if (it) {
 
-	            if (it->state >= 0) {
+	        if (it->state >= 0) {
 #ifdef COLLECT
-                        brhits += it->size / cacheLineSize;
+                brhits += it->size / cacheLineSize;
 #endif
 #ifdef COLLECT
-	                brtimes += it->size / cacheLineSize;
+	            brtimes += it->size / cacheLineSize;
 #endif
 		        reqQ->pop();
 		        readyQ->push(it);
 		        D(runHit.push_back(std::make_pair(get_time() - startTime, key));)
-			continue;
-	            }
-	            if (it->state<0) { // find enough space to load the the evicted part
-    	                if (it->state != -1) {std::cerr<<"error"<<std::endl; exit(0);};
-	                cachemanager->recache(it);
-			if (it == nullptr) {
+		        //D(std::cout<<"hit"<<std::endl;)
 			    continue;
-			}
-			D(runPHit.push_back(std::make_tuple(get_time() - startTime, it->gkey, it->dsi._size));)
+	        }
+	        if (it->state<0) { // find enough space to load the the evicted part
+    	        if (it->state != -1) {std::cerr<<"error"<<std::endl; exit(0);};
+	                //cachemanager->recache(it);
+			//if (it == nullptr) {
+			//    continue;
+			//}
+			    D(runPHit.push_back(std::make_tuple(get_time() - startTime, it->gkey, it->dsi._size));)
+		        //D(std::cout<<"phit"<<std::endl;)
 #ifdef COLLECT
-                        brhits += it->curSize / cacheLineSize;
+                brhits += it->curSize / cacheLineSize;
 #endif
 #ifdef COLLECT
-	                brtimes += it->size / cacheLineSize;
+	            brtimes += it->size / cacheLineSize;
 #endif
-	                ioQ->push(it);
-	             }
-                }
+	            ioQ->push(it);
+	        }
+            }
     // else, read the item from disk and potentially store it into the memory cached depending on the 'cachedFlag' (which is the last parameter in this funtion)
-                else {
-                  auto nit = cachemanager->cache(dsi._size, key);
-	          if (nit == nullptr) {
-	              continue;
-	          }
-	          nit->dsi = dsi;
-	          nit->gkey = key;
-		  D(runMiss.push_back(std::make_pair(get_time() - startTime, key));)
+            else {
+                  //auto nit = cachemanager->cache(dsi._size, key);
+	              //if (nit == nullptr) {
+	                  //continue;
+	              // }
+             auto nit = reinterpret_cast<DiskComponent<KeyTy>*>(new ValueTy());
+                  
+	         nit->dsi = dsi;
+	         nit->gkey = key;
+		     D(runMiss.push_back(std::make_pair(get_time() - startTime, key));)
+		     //D(std::cout<<"miss:"<<++i<<std::endl;)
 #ifdef COLLECT
-                  mbytes += dsi._size;
+             mbytes += dsi._size;
 #endif
-#ifdef COLLECT
-	          brtimes += nit->size / cacheLineSize;
-#endif
-	          ioQ->push(nit);
-               }
-	       reqQ->pop();
-	    }
-	 }
+	         ioQ->push(nit);
+             }
+	         reqQ->pop();
+            }
+	     }
+    }
 
 	ValueTy* get() {
-	    return readyQ->pop();
+	    //D(std::cout<<"get"<<std::endl;)
+        return readyQ->pop();
 	}
 	void request(KeyTy key) {
 	    reqQ->push(key);
@@ -242,7 +271,7 @@ public:
 	    std::lock_guard<std::mutex> dLock(dMutex);
 	    cachemanager->dump();
 	}
-	void dumpEvents() {
+	D(void dumpEvents() {
 	    char tmp[64];
 	    int fevents = open("/home/zhaopeng/graph/GG-GraphCached/events.dat", O_CREAT|O_WRONLY|O_APPEND, 0600);
 	    std::cout<<"file created"<<std::endl;
@@ -277,7 +306,7 @@ public:
 		::write(fevents, tmp, len);
 	    }
 	    close(fevents);
-	}
+	})
 	void stat() {
 #ifdef COLLECT
             //std::cout<<"total partition read times: "<<rtimes<<std::endl;
@@ -292,7 +321,7 @@ public:
             std::cout<<"mmap count: "<<cachemanager->getMmapcount()<<std::endl;
 	    std::cout<<"mremap count: "<<cachemanager->getMremapcount()<<std::endl;
 	    std::cout<<"munmap count: "<<cachemanager->getMunmapcount()<<std::endl;
-	    D(dumpEvents();)
+	    //D(dumpEvents();)
 #endif
 #ifdef LRURETRY
             print_nretry();
