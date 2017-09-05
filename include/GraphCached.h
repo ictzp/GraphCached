@@ -47,6 +47,8 @@ protected:
 
         std::atomic<long> brtimes;
 	std::atomic<long> brhits;
+    std::atomic<long> iobrtimes;
+    std::atomic<long> iombytes;
 #endif
 #ifdef DEBUG
         std::list<std::tuple<double, KeyTy, size_t>> ioStart;
@@ -61,20 +63,20 @@ protected:
 public:
         GraphCached(){
 #ifdef COLLECT
-            brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
+            iobrtimes = iombytes = brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(12u, 4096*1024*1024ull, 24*1024*1024u);
 	}
 	GraphCached(std::string filename): baseFilename(filename)   {
 #ifdef COLLECT
-            brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
+            iobrtimes = iombytes = brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(12u, 4096*1024*1024ull, 24*1024*1024u);
 	}
 
 	GraphCached(std::string filename, uint32_t clsp, uint64_t cs, uint64_t mps): baseFilename(filename) {
 #ifdef COLLECT
-            brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
+            iobrtimes = iombytes = brtimes = brhits = mbytes = rtimes = rhits = wtimes = whits = 0;
 #endif
 	    cachemanager = new CacheManager<KeyTy, ValueTy>(clsp, cs, mps);
 	}
@@ -129,7 +131,7 @@ public:
 	            it->curSize = it->size;
 	            it->state = 1;
 #ifdef COLLECT
-                brtimes += it->size / cacheLineSize;
+                iobrtimes += it->size / cacheLineSize;
 #endif
 	            readyQ->push(reinterpret_cast<ValueTy*>(it));
 	            //D(std::cout<<"ready:"<<++i<<std::endl;)
@@ -148,7 +150,7 @@ public:
 	                 bytes += cur;
 	             }
 #ifdef COLLECT
-                     mbytes += bytes;
+                     iombytes += bytes;
 #endif
 	     // set the state
 	             it->curSize = it->size;
@@ -314,10 +316,10 @@ public:
             //std::cout<<"total partition write times: "<<wtimes<<std::endl;
             //std::cout<<"total partition write hits: "<<whits<<std::endl;
             //std::cout<<"partition hit ratio: "<<(rhits+whits)/(1.0*(rtimes+wtimes))<<std::endl;
-            std::cout<<"miss bytes: "<<mbytes<<std::endl<<std::endl;
-            std::cout<<"total block read times: "<<brtimes<<std::endl;
+            std::cout<<"miss bytes: "<<mbytes+iombytes<<std::endl<<std::endl;
+            std::cout<<"total block read times: "<<brtimes+iobrtimes<<std::endl;
             std::cout<<"total block read hits: "<<brhits<<std::endl;
-	    std::cout<<"block hit ratio: "<<(brhits)/(1.0*brtimes)<<std::endl;
+	    std::cout<<"block hit ratio: "<<(brhits)/(1.0*(brtimes+iobrtimes))<<std::endl;
             std::cout<<"mmap count: "<<cachemanager->getMmapcount()<<std::endl;
 	    std::cout<<"mremap count: "<<cachemanager->getMremapcount()<<std::endl;
 	    std::cout<<"munmap count: "<<cachemanager->getMunmapcount()<<std::endl;
