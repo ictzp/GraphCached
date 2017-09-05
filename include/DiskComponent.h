@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <list>
+#include <mutex>
 
 namespace graphcached {
 
@@ -39,7 +40,8 @@ public:
 	uint64_t size; // size is aligned with cacheLineSize,
 	               // which is the total size in memory
 	uint64_t curSize;
-	// refcount is zero if no threads hold this
+	uint64_t preCurSize;
+    // refcount is zero if no threads hold this
 	// else it indicates the number of theads holding it
         std::atomic<int> refcount;
 	// state:
@@ -49,14 +51,15 @@ public:
 	// -2: all data evicted or not initialized
 	std::atomic<int> state;
         void* addr;
-	//std::list<Block*> blocks;
-	int willBeUsed;
+    std::mutex pMutex;
+    bool part;
+    bool part1;
+    //std::list<Block*> blocks;
 	typename std::list<DiskComponent<KeyTy>*>::iterator lruPos;
 public:
 	DiskComponent() {
 	    refcount = 0;
 	    state = -2;
-	    willBeUsed = 0;
 	}
 	DiskComponent(KeyTy key): gkey(key) 
 	{

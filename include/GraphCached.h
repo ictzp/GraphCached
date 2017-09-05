@@ -138,7 +138,9 @@ public:
                 ioQ->pop();
             }
 		else if (it->state == -1) {
+            it->pMutex.lock();
             auto ret = cachemanager->recache(it);
+            it->pMutex.unlock();
             if (ret == nullptr) continue;
 		    it = ret;
             uint64_t size = it->size - it->curSize;
@@ -153,7 +155,10 @@ public:
                      iombytes += bytes;
 #endif
 	     // set the state
-	             it->curSize = it->size;
+                 it->preCurSize = it->curSize;
+	             it->pMutex.lock();
+                 it->curSize = it->size;
+                 it->pMutex.unlock();
 	             it->state = 1;
 	             readyQ->push(reinterpret_cast<ValueTy*>(it));
 	        ioQ->pop();    
@@ -228,7 +233,10 @@ public:
 #ifdef COLLECT
 	            brtimes += it->size / cacheLineSize;
 #endif
-	            ioQ->push(it);
+	            it->part = 1;
+                it->part1 = 1;
+                readyQ->push(it);
+                ioQ->push(it);
 	        }
             }
     // else, read the item from disk and potentially store it into the memory cached depending on the 'cachedFlag' (which is the last parameter in this funtion)
