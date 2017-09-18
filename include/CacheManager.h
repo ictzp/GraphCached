@@ -8,6 +8,8 @@
 #include "CachePolicy.h"
 #include "LruPolicy.h"
 #include "LookAheadPolicy.h"
+#include "MruPolicy.h"
+#include "LookAheadLru.h"
 
 namespace graphcached {
 
@@ -39,12 +41,21 @@ public:
 	//cachepolicy = new LruPolicy<KeyTy>();
 	//policy = 0;
 	if (cacheSize % cacheLineSize) std::cout<<"incorrect cacheSize"<<std::endl;
-	cachepolicy = new LookAheadPolicy<KeyTy>();
-	policy = 1;
-	ht = new Hashtable<KeyTy>();
+	// LookAhead policy
+    //cachepolicy = new LookAheadPolicy<KeyTy>();
+	//policy = 1;
+    //MRU policy
+    cachepolicy = new MruPolicy<KeyTy>();
+    policy = 2;
+	//LookAheadLru policy
+    //cachepolicy = new LookAheadLruPolicy<KeyTy>();
+    //policy  = 3;
+
+    ht = new Hashtable<KeyTy>();
 	mmapcount = 0;
 	//Block::blocksize = cacheLineSize;
     };
+    
     
     DiskComponent<KeyTy>* cache(uint64_t size, KeyTy key, DiskComponent<KeyTy>* dc);
     DiskComponent<KeyTy>* recache(DiskComponent<KeyTy>* dc);
@@ -56,14 +67,15 @@ public:
     }
     void reorder(size_t pid) {
     std::lock_guard<std::mutex> llLock(cmMutex);
-        if (policy == 1)
+        if (policy == 1 || policy == 3)
             dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->reorder(pid);
     }
     void endIter() {
     std::lock_guard<std::mutex> llLock(cmMutex);
-        if (policy == 1)
+        if (policy == 1 || policy == 3)
 	    dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->endIter();
     }
+    uint64_t getCacheSize() {return cacheSize;}
     uint32_t getCacheLineSize() {return cacheLineSize;}
     uint32_t getMmapcount() {return mmapcount;}
     uint32_t getMremapcount() {return cachepolicy->getMremapcount();}

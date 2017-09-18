@@ -48,6 +48,7 @@ install(FILES
         "include/GraphCached.h"             "include/Hashtable.h"            "include/DiskComponent.h"
 	"include/CacheManager.h"            "include/CachePolicy.h"          "include/LruPolicy.h"
         "include/queue.hpp"                 "include/LookAheadPolicy.h"      "include/debug.h"
+        "include/MruPolicy.h"               "include/LookAheadLru.h" 
 #	"3rd/memcached-1.4.36/memcached.h"
 #        "3rd/memcached-1.4.36/assoc.h"      "3rd/memcached-1.4.36/itoa_ljust.h"     "3rd/memcached-1.4.36/protocol_binary.h"
 #	"3rd/memcached-1.4.36/bipbuffer.h"  "3rd/memcached-1.4.36/jenkins_hash.h"   "3rd/memcached-1.4.36/sasl_defs.h"

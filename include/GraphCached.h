@@ -324,7 +324,8 @@ public:
             //std::cout<<"total partition write times: "<<wtimes<<std::endl;
             //std::cout<<"total partition write hits: "<<whits<<std::endl;
             //std::cout<<"partition hit ratio: "<<(rhits+whits)/(1.0*(rtimes+wtimes))<<std::endl;
-            std::cout<<"miss bytes: "<<mbytes+iombytes<<std::endl<<std::endl;
+        std::cout<<"cache size: "<<cachemanager->getCacheSize()/(1024 *1024 *1024)<<std::endl;    
+        std::cout<<"miss bytes: "<<mbytes+iombytes<<std::endl<<std::endl;
             std::cout<<"total block read times: "<<brtimes+iobrtimes<<std::endl;
             std::cout<<"total block read hits: "<<brhits<<std::endl;
 	    std::cout<<"block hit ratio: "<<(brhits)/(1.0*(brtimes+iobrtimes))<<std::endl;
