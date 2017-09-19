@@ -26,12 +26,12 @@ execute_process( COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE PLAT_ARCH)
 
 message(STATUS "Platfrom architecture : ${PLAT_ARCH}")
 
-include(CPack)
-include(TestBigEndian)
-TEST_BIG_ENDIAN(IS_BIG_ENDIAN)
-if(NOT ${IS_BIG_ENDIAN})
-  add_definitions(-D__LITTLE_ENDIAN__)
-endif()
+#include(CPack)
+#include(TestBigEndian)
+#TEST_BIG_ENDIAN(IS_BIG_ENDIAN)
+#if(NOT ${IS_BIG_ENDIAN})
+#  add_definitions(-D__LITTLE_ENDIAN__)
+#endif()
 
 ##if(NOT ${PLAT_ARCH} MATCHES "x86_64")
 ##  add_definitions(-DUSE_UCONTEXT=1)
@@ -60,7 +60,7 @@ install(FILES
         "include"
         )
 
-if(BUILD_TESTS)
-  add_subdirectory(tests)
-endif(BUILD_TESTS)
+#if(BUILD_TESTS)
+#  add_subdirectory(tests)
+#endif(BUILD_TESTS)
 
