@@ -60,6 +60,11 @@ protected:
         std::list<std::tuple<double, KeyTy, size_t>> runPHit;
         double startTime;
 #endif
+
+#ifdef RECORD
+    double totalIOTime;
+#endif
+
 public:
         GraphCached(){
 #ifdef COLLECT
@@ -89,6 +94,9 @@ public:
 	    releaseQ = new Queue<DiskComponent<KeyTy>*>(65536);
 	    hintQ = new Queue<size_t>(65536);
 	    ioQ = new Queue<DiskComponent<KeyTy>*>(131072);
+#ifdef RECORD
+        totalIOTime = 0;
+#endif
 	    iothread = new std::thread(&GraphCached<KeyTy, ValueTy>::io, this);
 	    cacheap = new std::thread(&GraphCached<KeyTy, ValueTy>::run, this);
 	    D(startTime = get_time();)
@@ -106,11 +114,14 @@ public:
 		if (it == nullptr) {
 		    readyQ->push(nullptr);
             ioQ->pop();
+            if (totalIOTime != 0)
+                std::cout<<"IOtime: "<<totalIOTime<<std::endl;
+            totalIOTime = 0;
 		    continue;
 		}
 		auto dsi = it->dsi;
 		D(ioStart.push_back(std::make_tuple(get_time() - startTime, it->gkey, it->dsi._size));)
-        //D(std::cout<<"ioStart"<<std::endl;)
+            //D(std::cout<<"ioStart"<<std::endl;)
 	        if (it->state == -2) {
                 auto ret = cachemanager->cache(dsi._size, it->gkey, it);
                 if (ret == nullptr) continue;
@@ -118,6 +129,9 @@ public:
                 it = ret;
                 int fd = dsi._fd; 
 	            size_t bytes = 0;
+#ifdef RECORD
+        auto startT = get_time();
+#endif
 	            while (bytes < dsi._size) {
 	                size_t size = dsi._size;
 	                if ((dsi._size&PAGESIZEMASK2) != 0) {
@@ -127,6 +141,9 @@ public:
 		        if (cur == -1) { std::cout<<"read file error"<<std::endl; perror("read file error:"); exit(0);}
 		        bytes += cur;
 	            }
+#ifdef RECORD
+        totalIOTime += (get_time() - startT);
+#endif
 	        // change state
 	            it->curSize = it->size;
 	            it->state = 1;
@@ -146,11 +163,17 @@ public:
             uint64_t size = it->size - it->curSize;
 	            int fd = dsi._fd;
 	            size_t bytes = 0;
+#ifdef RECORD
+        auto startT = get_time();
+#endif
 	            while (bytes < size) {
 	                 size_t cur = pread(fd, reinterpret_cast<char*>(it->addr)+it->curSize, size, dsi._offset+it->curSize);
                          if (cur == -1) { std::cout<<"key:"<<std::get<0>(it->gkey)<<" "<<std::get<1>(it->gkey)<<" it->size:"<<it->size<<" it->curSize:"<<it->curSize<<" fd:"<<fd<<" addr:"<<it->curSize<<" size:"<<size<<" offset:"<<dsi._offset+it->curSize<<std::endl; perror("read file error:"); exit(0);}
 	                 bytes += cur;
 	             }
+#ifdef RECORD
+        totalIOTime += (get_time() - startT);
+#endif
 #ifdef COLLECT
                      iombytes += bytes;
 #endif
