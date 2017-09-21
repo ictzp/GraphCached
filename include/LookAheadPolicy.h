@@ -55,8 +55,8 @@ template <class KeyTy>
 uint64_t LookAheadList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht, typename std::list<DiskComponent<KeyTy>*>::iterator* watermark) {
     uint64_t remain = size;
     while (remain > 0) {
-        auto dc = *(lst.begin());
-	if (dc == nullptr) return size-remain;
+	if (lst.empty()) return size-remain;
+    auto dc = *(lst.begin());
 	if (dc->curSize <= remain) {
 	    // evict the whole dc
         if (*watermark == lst.begin())
@@ -74,7 +74,7 @@ uint64_t LookAheadList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht, typena
 	}
 	else {
 	    // evit part of the dc
-            dc->addr = mremap(dc->addr, dc->curSize, dc->curSize-remain, 0);
+        dc->addr = mremap(dc->addr, dc->curSize, dc->curSize-remain, 0);
 	    mremapcount++;
 	    if (dc->addr == MAP_FAILED) {
 	        perror("mremap failed");

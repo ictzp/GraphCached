@@ -58,11 +58,13 @@ public:
 	typename std::list<DiskComponent<KeyTy>*>::iterator lruPos;
 public:
 	DiskComponent() {
-	    refcount = 0;
+	    part = part1 = 0;
+        refcount = 0;
 	    state = -2;
 	}
 	DiskComponent(KeyTy key): gkey(key) 
 	{
+        part = part1 = 0;
 	    refcount = 0;
 	    state = -2;
 	}

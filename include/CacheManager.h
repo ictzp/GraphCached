@@ -34,27 +34,26 @@ public:
     cacheLineSizePower(clsp), cacheSize(cs), maxPartitionSize(mps)
     {
         cacheLineSize = 1ull<<cacheLineSizePower;
-	cacheLineSizeMask1 = (std::numeric_limits<uint64_t>::max())<<cacheLineSizePower;
-	cacheLineSizeMask2 = cacheLineSize - 1;
-	freeCacheSize = cacheSize;
-	// LRU policy is the default policy
-	//cachepolicy = new LruPolicy<KeyTy>();
-	//policy = 0;
-	if (cacheSize % cacheLineSize) std::cout<<"incorrect cacheSize"<<std::endl;
-	// LookAhead policy
+        cacheLineSizeMask1 = (std::numeric_limits<uint64_t>::max())<<cacheLineSizePower;
+        cacheLineSizeMask2 = cacheLineSize - 1;
+        freeCacheSize = cacheSize;
+        // LRU policy is the default policy
+        //cachepolicy = new LruPolicy<KeyTy>();
+        //policy = 0;
+        if (cacheSize % cacheLineSize) std::cout<<"incorrect cacheSize"<<std::endl;
+        // LookAhead policy
         cachepolicy = new LookAheadPolicy<KeyTy>();
-	policy = 1;
-    //MRU policy
-    //cachepolicy = new MruPolicy<KeyTy>();
-    //policy = 2;
-	//LookAheadLru policy
-    //cachepolicy = new LookAheadLruPolicy<KeyTy>();
-    //policy  = 3;
-
-    ht = new Hashtable<KeyTy>();
-	mmapcount = 0;
-	//Block::blocksize = cacheLineSize;
-    };
+        policy = 1;
+        //MRU policy
+        //cachepolicy = new MruPolicy<KeyTy>();
+        //policy = 2;
+        //LookAheadLru policy
+        //cachepolicy = new LookAheadLruPolicy<KeyTy>();
+        //policy  = 3;
+    
+        ht = new Hashtable<KeyTy>();
+        mmapcount = 0;
+    }
     
     
     DiskComponent<KeyTy>* cache(uint64_t size, KeyTy key, DiskComponent<KeyTy>* dc);
@@ -63,17 +62,17 @@ public:
     void release(DiskComponent<KeyTy>*);  
     void dump() {
         ht->dump();
-	cachepolicy->dump();
+        cachepolicy->dump();
     }
     void reorder(size_t pid) {
-    std::lock_guard<std::mutex> llLock(cmMutex);
+        std::lock_guard<std::mutex> llLock(cmMutex);
         if (policy == 1 || policy == 3)
             dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->reorder(pid);
     }
     void endIter() {
-    std::lock_guard<std::mutex> llLock(cmMutex);
+        std::lock_guard<std::mutex> llLock(cmMutex);
         if (policy == 1 || policy == 3)
-	    dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->endIter();
+        dynamic_cast<LookAheadPolicy<KeyTy>*>(cachepolicy)->endIter();
     }
     uint64_t getCacheSize() {return cacheSize;}
     uint32_t getCacheLineSize() {return cacheLineSize;}
@@ -94,20 +93,9 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::find(KeyTy key) {
     auto dc =  ht->find(key);
     if (dc == nullptr)
         return dc;
-    // inc refcount and set state
-    //int rc = dc->refcount;
-    //int expected = 0;
-    //int desired = 1;
-    //if (rc == 0 && dc->refcount.compare_exchange_strong(expected, desired)) {
-    //    dc->state = 1;
-    //    cachepolicy->remove(dc);
-    //}
-    //else {
-    //    dc->refcount++;
-    //
     dc->refcount++;
     if (dc->refcount == 1) {
-	cachepolicy->remove(dc);
+        cachepolicy->remove(dc);
     }
     return dc;
 }
@@ -117,9 +105,6 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key
     std::lock_guard<std::mutex> llLock(cmMutex);
     // cache and recache are the only two interfaces which can insert item and delete item
     // currently, we proctect this with a lock
-    //std::lock_guard<std::mutex> cLock(cacheMutex);
-    
-    //std::cout<<"cacheLineSizePower:"<<cacheLineSizePower<<std::endl;
     //std::cout<<"cacheSize:"<<cacheSize<<std::endl;
     //std::cout<<"cacheLineSizeMask1:0x"<<std::hex<<cacheLineSizeMask1<<std::endl;
     //std::cout<<"cacheLineSizeMask2:0x"<<cacheLineSizeMask2<<std::dec<<std::endl;
@@ -132,7 +117,7 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key
     // is there enough free space?
     if (freeCacheSize < size) {
         auto evicted = cachepolicy->evict(size - freeCacheSize, ht);
-	freeCacheSize += evicted;
+        freeCacheSize += evicted;
     }
     if (freeCacheSize < size) return nullptr;
     // new diskcomponent, add it to hashtable
@@ -140,7 +125,7 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::cache(uint64_t sz, KeyTy key
     mmapcount++;
     if (dc->addr == MAP_FAILED) {
         perror("MAP FAILED");
-	exit(0);
+        exit(0);
     }
     freeCacheSize -= size;
     dc->size = size;
@@ -158,13 +143,13 @@ DiskComponent<KeyTy>* CacheManager<KeyTy, ValueTy>::recache(DiskComponent<KeyTy>
     uint64_t size = dc->size - dc->curSize;
     if (freeCacheSize < size) {
         auto evicted = cachepolicy->evict(size - freeCacheSize, ht);
-	freeCacheSize += evicted;
+        freeCacheSize += evicted;
     }
     if (freeCacheSize < size) return nullptr;
     dc->addr = mremap(dc->addr, dc->curSize, dc->size, MREMAP_MAYMOVE);
     if (dc->addr == MAP_FAILED) {
         perror("MAP FAILED");
-	exit(0);
+        exit(0);
     }
     freeCacheSize -= size;
     return dc;
