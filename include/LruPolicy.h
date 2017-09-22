@@ -53,7 +53,8 @@ uint64_t LruList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
     //std::lock_guard<std::mutex> llLock(lruMutex);
     uint64_t remain = size;
     while (remain > 0) {
-        auto dc = *(lst.begin());
+    if (lst.empty()) return size-remain;
+    auto dc = *(lst.begin());
 	if (dc->curSize <= remain) {
 	    // evict the whole dc
 	    lst.pop_front();

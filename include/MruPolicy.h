@@ -55,8 +55,8 @@ template <class KeyTy>
 uint64_t MruList<KeyTy>::evict(uint64_t size, Hashtable<KeyTy>* ht) {
     uint64_t remain = size;
     while (remain > 0) {
+	    if (lst.empty()) return size-remain;
         auto dc = *(lst.begin());
-	    if (dc == nullptr) return size-remain;
 	    if (dc->curSize <= remain) {
 	        // evict the whole dc
 	        lst.pop_front();

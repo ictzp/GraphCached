@@ -42,11 +42,11 @@ public:
         //policy = 0;
         if (cacheSize % cacheLineSize) std::cout<<"incorrect cacheSize"<<std::endl;
         // LookAhead policy
-        cachepolicy = new LookAheadPolicy<KeyTy>();
-        policy = 1;
+        //cachepolicy = new LookAheadPolicy<KeyTy>();
+        //policy = 1;
         //MRU policy
-        //cachepolicy = new MruPolicy<KeyTy>();
-        //policy = 2;
+        cachepolicy = new MruPolicy<KeyTy>();
+        policy = 2;
         //LookAheadLru policy
         //cachepolicy = new LookAheadLruPolicy<KeyTy>();
         //policy  = 3;
